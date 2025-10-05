@@ -14,21 +14,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # OIDCでAzureにログイン（Deploy Centerが作成した既存のSecrets名を使用）
+      # OIDCでAzureにログイン（既存Secrets名を使用）
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DDF2445764E8464A8A02F7BE062F45A2 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_4BA2F9B4ECAA402A82BE2676064139E1 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_9D3E0A455F504E74A34E1387D620A199 }}
 
-      # Pythonバックエンドの依存をインストール（正しいパス）
+      # バックエンド依存を正しいパスでインストール（必要ならテスト）
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       - name: Install backend deps
         run: python -m pip install -r app/backend/requirements.txt
 
-      # フロントエンドをビルド
+      # フロントをビルド
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -38,10 +38,17 @@ jobs:
           npm ci
           npm run build
 
-      # App Serviceへデプロイ（Publish Profile不要／OIDCコンテキスト）
+      # ZIPパッケージを作成
+      - name: Create zip package
+        run: |
+          sudo apt-get update && sudo apt-get install -y zip
+          zip -r package.zip . -x "venv/**" "**/.git/**"
+
+      # App Service へZIPデプロイ（resource-groupを必ず指定）
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: app-rag-attach
+          app-name: app-rag-attach          # ←あなたのWebApp名
+          resource-group: RAG_shimada  # ←WebAppが属するRG名に置換
           slot-name: Production
-          package: .
+          package: package.zip
