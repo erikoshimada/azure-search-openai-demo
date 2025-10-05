@@ -14,21 +14,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # OIDCでAzureにログイン（既存Secrets名を使用）
+      # OIDCでAzureログイン（Deploy Centerが作った既存Secrets名をそのまま使用）
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DDF2445764E8464A8A02F7BE062F45A2 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_4BA2F9B4ECAA402A82BE2676064139E1 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_9D3E0A455F504E74A34E1387D620A199 }}
 
-      # バックエンド依存を正しいパスでインストール（必要ならテスト）
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - name: Install backend deps
-        run: python -m pip install -r app/backend/requirements.txt
-
-      # フロントをビルド
+      # フロントエンドビルド（app/frontend）
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -38,17 +31,32 @@ jobs:
           npm ci
           npm run build
 
-      # ZIPパッケージを作成
+      # Python 3.10（ローカルpipは不要。Oryxに任せる）
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # デプロイ用の収集ディレクトリを作成（app配下のみ収集し、ルートにrequirements.txtを配置）
+      - name: Prepare deploy payload
+        run: |
+          rm -rf deploy
+          mkdir -p deploy
+          cp -r app deploy/
+          # ルートにrequirements.txtを用意（Oryxがpipインストールできるように）
+          cp app/backend/requirements.txt deploy/requirements.txt
+
+      # ZIPパッケージ作成（pyproject.toml等、リポジトリ直下の余計なファイルは含めない）
       - name: Create zip package
         run: |
+          cd deploy
           sudo apt-get update && sudo apt-get install -y zip
-          zip -r package.zip . -x "venv/**" "**/.git/**"
+          zip -r ../package.zip .
+          cd -
 
-      # App Service へZIPデプロイ（resource-groupを必ず指定）
+      # App ServiceへZIPデプロイ（resource-groupを必ず指定）
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: app-rag-attach          # ←あなたのWebApp名
-          resource-group: RAG_shimada  # ←WebAppが属するRG名に置換
-          slot-name: Production
+          app-name: app-rag-attach                 # ←あなたのWebApp名のままでOK
+          resource-group: RAG_shimada  # ←WebAppが所属するRG名に置換
           package: package.zip
