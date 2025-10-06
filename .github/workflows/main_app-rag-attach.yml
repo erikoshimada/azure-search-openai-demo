@@ -31,24 +31,22 @@ jobs:
           npm ci
           npm run build
 
-      # デプロイ用ペイロード作成：app一式をdeploy/へ収集
+      # デプロイ用ペイロード作成：app一式をdeploy/へ収集（repo全体ではなくappのみ）
       - name: Prepare deploy payload
         run: |
           rm -rf deploy
           mkdir -p deploy
           cp -r app deploy/
-          # requirements.txtはapp/backendに元々あります（起動時にそこを参照）
-          # Oryxの過去成果物を入れないことが重要（oryx-manifest.toml等は含めない）
 
-      # （推奨）Run-from-packageを無効化して物理展開にする
+      # Run-from-packageを無効化して物理展開にする（Oryx回避）
       - name: Disable run-from-package
         run: |
           az webapp config appsettings set \
-            -g <YOUR_RESOURCE_GROUP_NAME> \
+            -g "RAG_shimada" \
             -n app-rag-attach \
             --settings WEBSITE_RUN_FROM_PACKAGE=0 SCM_DO_BUILD_DURING_DEPLOYMENT=false
 
-      # ZIP作成（deployの中身のみ）
+      # ZIP作成（deployの中身のみを含める）
       - name: Create zip package
         run: |
           cd deploy
