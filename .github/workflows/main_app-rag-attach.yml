@@ -14,38 +14,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # OIDCでAzureログイン（Deploy Centerが作った既存Secrets名をそのまま使用）
+      # OIDCログイン（Deploy Centerが作成した既存Secrets名を利用）
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DDF2445764E8464A8A02F7BE062F45A2 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_4BA2F9B4ECAA402A82BE2676064139E1 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_9D3E0A455F504E74A34E1387D620A199 }}
 
-      # フロントエンドビルド（app/frontend）
+      # （任意）フロントを事前ビルドしたい場合は有効化
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Build frontend
+      - name: Build frontend (optional)
         working-directory: app/frontend
         run: |
           npm ci
           npm run build
 
-      # Python 3.10（ローカルpipは不要。Oryxに任せる）
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      # デプロイ用の収集ディレクトリを作成（app配下のみ収集し、ルートにrequirements.txtを配置）
+      # デプロイ用ペイロード作成：app一式をdeploy/へ収集
       - name: Prepare deploy payload
         run: |
           rm -rf deploy
           mkdir -p deploy
           cp -r app deploy/
-          # ルートにrequirements.txtを用意（Oryxがpipインストールできるように）
-          cp app/backend/requirements.txt deploy/requirements.txt
+          # requirements.txtはapp/backendに元々あります（起動時にそこを参照）
+          # Oryxの過去成果物を入れないことが重要（oryx-manifest.toml等は含めない）
 
-      # ZIPパッケージ作成（pyproject.toml等、リポジトリ直下の余計なファイルは含めない）
+      # （推奨）Run-from-packageを無効化して物理展開にする
+      - name: Disable run-from-package
+        run: |
+          az webapp config appsettings set \
+            -g <YOUR_RESOURCE_GROUP_NAME> \
+            -n app-rag-attach \
+            --settings WEBSITE_RUN_FROM_PACKAGE=0 SCM_DO_BUILD_DURING_DEPLOYMENT=false
+
+      # ZIP作成（deployの中身のみ）
       - name: Create zip package
         run: |
           cd deploy
@@ -53,11 +56,10 @@ jobs:
           zip -r ../package.zip .
           cd -
 
-      # App ServiceへZIPデプロイ（resource-groupを必ず指定）
+      # ZIPデプロイ（site/wwwrootへ展開）
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: app-rag-attach                 # あなたのWebApp名のままでOK
-          resource-group: RAG_shimada  # ←WebAppが所属するRG名に置換
+          app-name: app-rag-attach
+          resource-group: RAG_shimada
           package: package.zip
-
