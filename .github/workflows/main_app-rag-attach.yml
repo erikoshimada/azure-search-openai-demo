@@ -14,30 +14,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Azure ログイン（既存のSecrets）
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DDF2445764E8464A8A02F7BE062F45A2 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_4BA2F9B4ECAA402A82BE2676064139E1 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_9D3E0A455F504E74A34E1387D620A199 }}
 
-      # （任意）フロント事前ビルド
+      # Node 20 でフロントをビルド
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Build frontend (optional)
+      - name: Build frontend
         working-directory: app/frontend
         run: |
-          npm ci
+          npm ci --no-audit --no-fund
           npm run build
 
-      # repo全体ではなく app/ だけをdeployへ収集
+      # デプロイ用ペイロード作成（ビルド済みappを丸ごと収集）
       - name: Prepare deploy payload
         run: |
           rm -rf deploy
           mkdir -p deploy
           cp -r app deploy/
+          # dist/build を backend/static に反映（ルータが静的配信する場合の保険）
+          if [ -d app/frontend/dist ]; then \
+            mkdir -p deploy/app/backend/static; \
+            cp -r app/frontend/dist/* deploy/app/backend/static/ || true; \
+          fi
+          if [ -d app/frontend/build ]; then \
+            mkdir -p deploy/app/backend/static; \
+            cp -r app/frontend/build/* deploy/app/backend/static/ || true; \
+          fi
 
-      # 物理展開＆Oryx回避を明示（RG名はあなたの値）
+      # 物理展開＆Oryx回避（RG名はあなたの値）
       - name: Disable run-from-package
         run: |
           az webapp config appsettings set \
@@ -45,7 +55,7 @@ jobs:
             -n app-rag-attach \
             --settings WEBSITE_RUN_FROM_PACKAGE=0 SCM_DO_BUILD_DURING_DEPLOYMENT=false
 
-      # ZIP作成（不要物を除外し軽量化）
+      # ZIP作成（不要物を除外して軽量化）
       - name: Create zip package
         run: |
           cd deploy
