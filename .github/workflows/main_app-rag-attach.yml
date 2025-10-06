@@ -57,6 +57,7 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: app-rag-attach                 # ←あなたのWebApp名のままでOK
+          app-name: app-rag-attach                 # あなたのWebApp名のままでOK
           resource-group: RAG_shimada  # ←WebAppが所属するRG名に置換
           package: package.zip
+
