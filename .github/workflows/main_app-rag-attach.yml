@@ -14,14 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # OIDCログイン（Deploy Centerが作成した既存Secrets名を利用）
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DDF2445764E8464A8A02F7BE062F45A2 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_4BA2F9B4ECAA402A82BE2676064139E1 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_9D3E0A455F504E74A34E1387D620A199 }}
 
-      # （任意）フロントを事前ビルドしたい場合は有効化
+      # （任意）フロント事前ビルド
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -31,14 +30,14 @@ jobs:
           npm ci
           npm run build
 
-      # デプロイ用ペイロード作成：app一式をdeploy/へ収集（repo全体ではなくappのみ）
+      # repo全体ではなく app/ だけをdeployへ収集
       - name: Prepare deploy payload
         run: |
           rm -rf deploy
           mkdir -p deploy
           cp -r app deploy/
 
-      # Run-from-packageを無効化して物理展開にする（Oryx回避）
+      # 物理展開＆Oryx回避を明示（RG名はあなたの値）
       - name: Disable run-from-package
         run: |
           az webapp config appsettings set \
@@ -46,12 +45,16 @@ jobs:
             -n app-rag-attach \
             --settings WEBSITE_RUN_FROM_PACKAGE=0 SCM_DO_BUILD_DURING_DEPLOYMENT=false
 
-      # ZIP作成（deployの中身のみを含める）
+      # ZIP作成（不要物を除外し軽量化）
       - name: Create zip package
         run: |
           cd deploy
           sudo apt-get update && sudo apt-get install -y zip
-          zip -r ../package.zip .
+          zip -r ../package.zip . \
+            -x "app/frontend/node_modules/**" \
+            -x "app/frontend/.next/cache/**" \
+            -x "**/.git/**" \
+            -x "**/.github/**"
           cd -
 
       # ZIPデプロイ（site/wwwrootへ展開）
@@ -59,5 +62,5 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: app-rag-attach
-          resource-group: RAG_shimada
+          resource-group: "RAG_shimada"
           package: package.zip
